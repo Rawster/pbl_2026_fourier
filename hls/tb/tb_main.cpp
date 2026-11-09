@@ -1,17 +1,13 @@
 // ============================================================================
-// tb_top.cpp - testbench dla:
-//   top_0t()  CCVT   (LATENCY 0)
-//   top_1t()  CADD   (LATENCY 1)
-//   top_2t()  CMLA   (LATENCY 2)
+// tb_main.cpp - testbench dla top_ccvt (CCVT), top_cadd (CADD), top_cmla (CMLA)
 //
 // Model referencyjny jest napisany w czystej arytmetyce calkowitej (int64),
 // niezaleznie od ap_fixed, wiec porownanie z DUT jest bit-exact.
+// Sprawdzane jest tez przekazanie pol id i vld z wejscia na wyjscie.
 //
-// Wybor testowanego DUT (makro w CFLAGS testbencha, zgodne z syn.top):
-//   -DTB_DUT_0T  - tylko top_0t (CCVT)   -> syn.top=top_0t
-//   -DTB_DUT_1T  - tylko top_1t (CADD)   -> syn.top=top_1t
-//   -DTB_DUT_2T  - tylko top_2t (CMLA)   -> syn.top=top_2t
-//   brak makra   - wszystkie trzy (tylko do C-sim!)
+// Wybor testowanego DUT - flaga z nazwa topu (ustawiana przez common.tcl):
+//   -DTOP=top_ccvt | -DTOP=top_cadd | -DTOP=top_cmla
+//   brak TOP - testuje wszystkie trzy (tylko do C-sim!)
 //
 // Tryby:
 //   domyslnie   - pelny test (C-sim): testy reczne + sweep naroznikow +
@@ -24,40 +20,47 @@
 #include <ap_int.h>
 
 // ---------------------------------------------------------------------------
-// Wybor DUT
+// Wybor DUT na podstawie -DTOP=<nazwa_topu>
 // ---------------------------------------------------------------------------
-#if (defined(TB_DUT_0T) + defined(TB_DUT_1T) + defined(TB_DUT_2T)) > 1
-  #error "Zdefiniuj co najwyzej jedno z: TB_DUT_0T, TB_DUT_1T, TB_DUT_2T"
-#endif
+#define TB_ID_top_ccvt 1
+#define TB_ID_top_cadd 2
+#define TB_ID_top_cmla 3
+#define TB_CAT_(a, b) a##b
+#define TB_CAT(a, b)  TB_CAT_(a, b)
+#define TB_STR_(x)    #x
+#define TB_STR(x)     TB_STR_(x)
 
-#if defined(TB_DUT_0T)
-  #define TEST_0T 1
-  #define TEST_1T 0
-  #define TEST_2T 0
-  #define DUT_NAME "top_0t (CCVT)"
-#elif defined(TB_DUT_1T)
-  #define TEST_0T 0
-  #define TEST_1T 1
-  #define TEST_2T 0
-  #define DUT_NAME "top_1t (CADD)"
-#elif defined(TB_DUT_2T)
-  #define TEST_0T 0
-  #define TEST_1T 0
-  #define TEST_2T 1
-  #define DUT_NAME "top_2t (CMLA)"
+#ifdef TOP
+  #define TB_SEL TB_CAT(TB_ID_, TOP)
+  #if TB_SEL == 1
+    #define TEST_CCVT 1
+    #define TEST_CADD 0
+    #define TEST_CMLA 0
+  #elif TB_SEL == 2
+    #define TEST_CCVT 0
+    #define TEST_CADD 1
+    #define TEST_CMLA 0
+  #elif TB_SEL == 3
+    #define TEST_CCVT 0
+    #define TEST_CADD 0
+    #define TEST_CMLA 1
+  #else
+    #error "Nieznany TOP - dozwolone: top_ccvt, top_cadd, top_cmla"
+  #endif
+  #define DUT_NAME TB_STR(TOP)
 #else
-  #define TEST_0T 1
-  #define TEST_1T 1
-  #define TEST_2T 1
-  #define DUT_NAME "top_0t + top_1t + top_2t (tylko C-sim)"
+  #define TEST_CCVT 1
+  #define TEST_CADD 1
+  #define TEST_CMLA 1
+  #define DUT_NAME "top_ccvt + top_cadd + top_cmla (tylko C-sim)"
 #endif
 
 // ---------------------------------------------------------------------------
-// Deklaracje musza byc IDENTYCZNE jak w pliku zrodlowym.
-// (Czysciej: przenies struct dataIn/dataOut + prototypy do top.h
-//  i dolacz go w obu plikach - wtedy niezgodnosc wyjdzie przy kompilacji.)
+// Deklaracje musza byc IDENTYCZNE jak w src/main.cpp
 // ---------------------------------------------------------------------------
 struct dataIn {
+    ap_uint<4> id;
+    ap_uint<1> vld;
     ap_uint<2> n;
     ap_uint<1> s;
     ap_uint<2> k;
@@ -70,16 +73,18 @@ struct dataIn {
 
 struct dataOut {
     ap_uint<32> data;
+    ap_uint<4>  id;
+    ap_uint<1> vld;
 };
 
-#if TEST_0T
-void top_0t(dataIn in, dataOut &outCCVT);
+#if TEST_CCVT
+void top_ccvt(dataIn in, dataOut &out);
 #endif
-#if TEST_1T
-void top_1t(dataIn in, dataOut &outCADD);
+#if TEST_CADD
+void top_cadd(dataIn in, dataOut &out);
 #endif
-#if TEST_2T
-void top_2t(dataIn in, dataOut &outCMLA);
+#if TEST_CMLA
+void top_cmla(dataIn in, dataOut &out);
 #endif
 
 // ---------------------------------------------------------------------------
@@ -186,33 +191,40 @@ static uint32_t ref_cmla(unsigned k, unsigned c, unsigned h,
 enum { F_CCVT = 0, F_CADD = 1, F_CMLA = 2 };
 static const char *fn_name[3] = {"CCVT", "CADD", "CMLA"};
 
-static long g_vectors  = 0;         // liczba wektorow wejsciowych
-static long g_calls[3] = {0, 0, 0}; // wywolania top_0t / top_1t / top_2t
-static long g_errors   = 0;
-static int  g_printed  = 0;
+static long     g_vectors  = 0;          // liczba wektorow wejsciowych
+static long     g_calls[3] = {0, 0, 0};  // wywolania top_ccvt / top_cadd / top_cmla
+static long     g_errors   = 0;
+static int      g_printed  = 0;
+static unsigned g_seq      = 0;          // licznik do generowania id/vld
 
 static dataIn make_in(unsigned n, unsigned s, unsigned k, unsigned c, unsigned h,
                       uint32_t rs1, uint32_t rs2, uint32_t rs3) {
     dataIn in;
+    in.id  = g_seq & 0xF;
+    in.vld = (g_seq >> 4) & 1;
+    g_seq++;
     in.n = n; in.s = s; in.k = k; in.c = c; in.h = h;
     in.rs1 = rs1; in.rs2 = rs2; in.rs3 = rs3;
     return in;
 }
 
+static bool can_print() {
+    if (g_printed++ < MAX_PRINT) return true;
+    if (g_printed == MAX_PRINT + 1) printf("... (kolejne bledy nie sa wypisywane)\n");
+    return false;
+}
+
 static void report(const char *tag, const char *fn, const dataIn &in,
                    uint32_t got, uint32_t exp) {
     g_errors++;
-    if (g_printed++ < MAX_PRINT) {
-        printf("BLAD [%s] %s: n=%u s=%u k=%u c=%u h=%u rs1=%08X rs2=%08X rs3=%08X\n"
-               "      got=%08X (Re=%6d Im=%6d)  exp=%08X (Re=%6d Im=%6d)\n",
-               tag, fn,
-               in.n.to_uint(), in.s.to_uint(), in.k.to_uint(), in.c.to_uint(), in.h.to_uint(),
-               in.rs1.to_uint(), in.rs2.to_uint(), in.rs3.to_uint(),
-               got, (int)lo16(got), (int)hi16(got),
-               exp, (int)lo16(exp), (int)hi16(exp));
-    } else if (g_printed == MAX_PRINT + 1) {
-        printf("... (kolejne bledy nie sa wypisywane)\n");
-    }
+    if (!can_print()) return;
+    printf("BLAD [%s] %s: n=%u s=%u k=%u c=%u h=%u rs1=%08X rs2=%08X rs3=%08X\n"
+           "      got=%08X (Re=%6d Im=%6d)  exp=%08X (Re=%6d Im=%6d)\n",
+           tag, fn,
+           in.n.to_uint(), in.s.to_uint(), in.k.to_uint(), in.c.to_uint(), in.h.to_uint(),
+           in.rs1.to_uint(), in.rs2.to_uint(), in.rs3.to_uint(),
+           got, (int)lo16(got), (int)hi16(got),
+           exp, (int)lo16(exp), (int)hi16(exp));
 }
 
 static uint32_t ref_fn(int fn, const dataIn &in) {
@@ -229,39 +241,37 @@ static uint32_t ref_fn(int fn, const dataIn &in) {
 // Czy funkcja fn jest testowana w tej kompilacji
 static bool fn_enabled(int fn) {
     switch (fn) {
-        case F_CCVT: return TEST_0T;
-        case F_CADD: return TEST_1T;
-        default:     return TEST_2T;
+        case F_CCVT: return TEST_CCVT;
+        case F_CADD: return TEST_CADD;
+        default:     return TEST_CMLA;
     }
 }
 
-// Wywoluje DUT odpowiedzialny za funkcje fn; false gdy ten DUT nie jest testowany
+// Wywoluje DUT odpowiedzialny za funkcje fn i sprawdza przekazanie id/vld;
+// zwraca false, gdy ten DUT nie jest testowany
 static bool dut_call(int fn, const dataIn &in, uint32_t &got) {
     dataOut o;
     switch (fn) {
-        case F_CCVT:
-#if TEST_0T
-            top_0t(in, o);
-            break;
-#else
-            return false;
+#if TEST_CCVT
+        case F_CCVT: top_ccvt(in, o); break;
 #endif
-        case F_CADD:
-#if TEST_1T
-            top_1t(in, o);
-            break;
-#else
-            return false;
+#if TEST_CADD
+        case F_CADD: top_cadd(in, o); break;
 #endif
-        default:
-#if TEST_2T
-            top_2t(in, o);
-            break;
-#else
-            return false;
+#if TEST_CMLA
+        case F_CMLA: top_cmla(in, o); break;
 #endif
+        default: return false;
     }
     g_calls[fn]++;
+
+    if (o.id != in.id || o.vld != in.vld) {
+        g_errors++;
+        if (can_print())
+            printf("BLAD %s: id/vld nie przekazane: in id=%u vld=%u, out id=%u vld=%u\n",
+                   fn_name[fn], in.id.to_uint(), in.vld.to_uint(),
+                   o.id.to_uint(), o.vld.to_uint());
+    }
     got = o.data.to_uint();
     return true;
 }
@@ -356,8 +366,8 @@ static void test_corners() {
     long err0 = g_errors, vec0 = g_vectors;
     for (unsigned ctrl = 0; ctrl < 16; ctrl++) {
         unsigned k = ctrl & 3, c = (ctrl >> 2) & 1, h = (ctrl >> 3) & 1;
-        if (c && !TEST_2T) continue;          // c uzywa tylko CMLA - nie dubluj wektorow
-        if (k && !TEST_1T && !TEST_2T) continue; // k nie wplywa na CCVT
+        if (c && !TEST_CMLA) continue;                // c uzywa tylko CMLA
+        if (k && !TEST_CADD && !TEST_CMLA) continue;  // k nie wplywa na CCVT
         for (int i = 0; i < N; i++)
             for (int j = 0; j < N; j += SWEEP_STRIDE) {
                 unsigned n = (i + j) & 3;
@@ -375,7 +385,7 @@ static void test_corners() {
 // ---------------------------------------------------------------------------
 static void test_ccvt_exhaustive() {
     if (!fn_enabled(F_CCVT)) {
-        printf("[3] CCVT wyczerpujacy:   pominiety (top_0t nie jest testowany)\n");
+        printf("[3] CCVT wyczerpujacy:   pominiety (top_ccvt nie jest testowany)\n");
         return;
     }
     if (!CCVT_EXHAUSTIVE) {
@@ -440,7 +450,7 @@ int main() {
     test_random();
 
     printf("----------------------------------------------\n");
-    printf("Wywolania: top_0t=%ld, top_1t=%ld, top_2t=%ld\n",
+    printf("Wywolania: top_ccvt=%ld, top_cadd=%ld, top_cmla=%ld\n",
            g_calls[F_CCVT], g_calls[F_CADD], g_calls[F_CMLA]);
     printf("Lacznie wektorow: %ld, bledow: %ld\n", g_vectors, g_errors);
     if (g_errors == 0) {
