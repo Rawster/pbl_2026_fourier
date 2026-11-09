@@ -10,12 +10,15 @@
 //   brak TOP - testuje wszystkie trzy (tylko do C-sim!)
 //
 // Tryby:
-//   domyslnie   - pelny test (C-sim): testy reczne + sweep naroznikow +
-//                 wyczerpujacy CCVT + 200k losowych wektorow
-//   -DTB_LIGHT  - lekki test (do C/RTL co-simulation)
+//   domyslnie       - pelny test (C-sim): testy reczne + sweep naroznikow +
+//                     wyczerpujacy CCVT + 200k losowych wektorow
+//   argument light  - lekki test (do C/RTL co-simulation), w HLS:
+//                     csim_design -argv light / cosim_design -argv light
+//   -DTB_LIGHT      - to samo, ale na stale przy kompilacji
 // ============================================================================
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 #include <random>
 #include <ap_int.h>
 
@@ -90,16 +93,19 @@ void top_cmla(dataIn in, dataOut &out);
 // ---------------------------------------------------------------------------
 // Konfiguracja
 // ---------------------------------------------------------------------------
-#ifdef TB_LIGHT
-static const long N_RANDOM        = 2000;
-static const int  SWEEP_STRIDE    = 8;
-static const bool CCVT_EXHAUSTIVE = false;
-#else
-static const long N_RANDOM        = 200000;
-static const int  SWEEP_STRIDE    = 1;
-static const bool CCVT_EXHAUSTIVE = true;
-#endif
-static const int MAX_PRINT = 20;
+// wartosci dla pelnego testu; set_light() przelacza na lekki
+static long N_RANDOM        = 200000;
+static int  SWEEP_STRIDE    = 1;
+static bool CCVT_EXHAUSTIVE = true;
+static bool g_light         = false;
+static const int MAX_PRINT  = 20;
+
+static void set_light() {
+    g_light         = true;
+    N_RANDOM        = 2000;
+    SWEEP_STRIDE    = 8;
+    CCVT_EXHAUSTIVE = false;
+}
 
 // ---------------------------------------------------------------------------
 // Pomocnicze
@@ -389,7 +395,7 @@ static void test_ccvt_exhaustive() {
         return;
     }
     if (!CCVT_EXHAUSTIVE) {
-        printf("[3] CCVT wyczerpujacy:   pominiety (TB_LIGHT)\n");
+        printf("[3] CCVT wyczerpujacy:   pominiety (tryb light)\n");
         return;
     }
     long err0 = g_errors, vec0 = g_vectors;
@@ -436,12 +442,16 @@ static void test_random() {
 }
 
 // ---------------------------------------------------------------------------
-int main() {
+int main(int argc, char **argv) {
+#ifdef TB_LIGHT
+    set_light();
+#endif
+    for (int i = 1; i < argc; i++)
+        if (strcmp(argv[i], "light") == 0) set_light();
+
     printf("==============================================\n");
     printf(" Testbench DUT: %s\n", DUT_NAME);
-#ifdef TB_LIGHT
-    printf(" Tryb: TB_LIGHT\n");
-#endif
+    printf(" Tryb: %s\n", g_light ? "light" : "pelny");
     printf("==============================================\n");
 
     test_directed();

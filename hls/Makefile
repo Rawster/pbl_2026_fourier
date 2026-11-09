@@ -7,10 +7,9 @@ HLS ?= vitis-run --mode hls --tcl
 # Lekki testbench w C-sim: make csim LIGHT=1
 LIGHT ?= 0
 
-# Build variables
-REPO_ROOT     ?= $(shell cd $(CURDIR)/.. && pwd)
-HLS_BUILD_DIR ?= $(REPO_ROOT)/build/hls
-HLS_OUT_DIR   ?= $(CURDIR)/out
+# Build variables (projekty HLS i workspace IDE -> out/, IP -> out/ip/)
+HLS_BUILD_DIR ?= $(CURDIR)/out
+HLS_OUT_DIR   ?= $(CURDIR)/out/ip
 
 export LIGHT HLS_BUILD_DIR HLS_OUT_DIR
 
@@ -25,7 +24,7 @@ define run_hls
 endef
 
 # Targets
-.PHONY: all create_project csim synth cosim export_ip test clean clean_out clean_all
+.PHONY: all create_project csim synth cosim export_ip test clean
 
 all: create_project synth export_ip
 
@@ -49,8 +48,3 @@ export_ip:
 
 clean:
 	rm -rf $(HLS_BUILD_DIR)
-
-clean_out:
-	rm -rf $(HLS_OUT_DIR)
-
-clean_all: clean clean_out

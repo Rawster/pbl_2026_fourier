@@ -2,7 +2,7 @@
 
 # ============================ USTAWIENIA ====================================
 set top          "top_cmla"               ;# top_ccvt | top_cadd | top_cmla
-set part_number  "xc7z020clg484-1"        ;# zu
+set part_number  "xczu9eg-ffvc900-1L-i"   ;# zu15: xczu15eg-ffvc900-1L-i
 set clock_period 10                       ;# [ns]
 # ============================================================================
 
@@ -14,11 +14,11 @@ proc env_or {name default} {
 }
 
 set hls_dir   [file dirname [file dirname [file normalize [info script]]]]
-set build_dir [file normalize [env_or HLS_BUILD_DIR "$hls_dir/build"]]
-set out_dir   [file normalize [env_or HLS_OUT_DIR   "$hls_dir/out"]]
+set build_dir [file normalize [env_or HLS_BUILD_DIR "$hls_dir/out"]]
+set out_dir   [file normalize [env_or HLS_OUT_DIR   "$hls_dir/out/ip"]]
 
 set tb_flags "-DTOP=$top"                ;# testbench wybiera DUT po nazwie topu
-if {[env_or LIGHT 0]} { append tb_flags " -DTB_LIGHT" }
+set light    [env_or LIGHT 0]            ;# 1 -> csim z lekkim testbenchem
 
 set src_file "$hls_dir/src/main.cpp"
 set tb_file  "$hls_dir/tb/tb_main.cpp"
