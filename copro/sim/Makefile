@@ -18,9 +18,9 @@ SEED      ?= 1
 N         ?= 20000
 
 TOP    = copro_top
-HLS_V ?= $(wildcard ../../hls/out/xilinx_com_hls_top_ccvt_1_0/hdl/verilog/*.v) \
-         $(wildcard ../../hls/out/xilinx_com_hls_top_cadd_1_0/hdl/verilog/*.v) \
-         $(wildcard ../../hls/out/xilinx_com_hls_top_cmla_1_0/hdl/verilog/*.v)
+HLS_V ?= $(wildcard ../../hls/out/ip/xilinx_com_hls_top_ccvt_1_0/hdl/verilog/*.v) \
+         $(wildcard ../../hls/out/ip/xilinx_com_hls_top_cadd_1_0/hdl/verilog/*.v) \
+         $(wildcard ../../hls/out/ip/xilinx_com_hls_top_cmla_1_0/hdl/verilog/*.v)
 RTL    = ../src/cv32e40x_if_xif.sv $(HLS_V) ../src/coprocesor.sv copro_top.sv
 TB     = tb_main.cpp
 OBJ    = obj_dir
